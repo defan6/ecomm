@@ -1,0 +1,25 @@
+services:
+  postgres-ecomm:
+    container_name: postgres-ecomm
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_DB: ecomm
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgresql_data:/var/lib/postgresql/data
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U postgres" ]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - ecomm
+volumes:
+  postgresql_data:
+networks:
+  ecomm:
+    driver: bridge
+    name: ecomm
