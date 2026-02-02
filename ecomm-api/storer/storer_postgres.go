@@ -2,7 +2,6 @@ package storer
 
 import (
 	"context"
-	"ecomm/ecomm-api/storer/types"
 	"errors"
 	"fmt"
 
@@ -14,19 +13,39 @@ type PostgresStorer struct {
 }
 
 const (
-	queryToInsert = `
+	queryToInsertProduct = `
 			INSERT INTO products
 			(name, image, category, description, rating, num_reviews, price, count_in_stock)
 			 VALUES 
 			(:name, :image, :category, :description, :rating, :num_reviews, :price, :count_in_stock)
 			RETURNING *
 			`
-	queryToSelect = `SELECT * FROM products WHERE id=:id`
+	queryToSelectProduct = `SELECT * FROM products WHERE id=:id`
 
-	queryToUpdate = `UPDATE products SET
+	queryToUpdateProduct = `UPDATE products SET
 	name=:name, image=:image, category=:category, description=:description, rating=:rating, num_reviews=:num_reviews, price=:price, count_in_stock=:count_in_stock, updated_at=NOW()
 	WHERE id=:id
 	RETURNING *
+	`
+
+	queryToInsertOrder = `
+	INSERT INTO orders
+	(payment_method, tax_price, shipping_price, total_price) 
+	VALUES
+	(:payment_method, :tax_price, :shipping_price, :total_price)
+	RETURNING *
+	`
+
+	queryToInsertOrderItem = `
+	INSERT INTO order_items
+	(name, quantity, image, price, product_id, order_id)
+	VALUES
+	(:name, :quantity, :image, :price, :product_id,:order_id)
+	RETURNING *
+	`
+
+	queryToGetOrder = `
+	SELECT * FROM orders WHERE id=:id
 	`
 )
 
@@ -34,8 +53,8 @@ func NewPostgresStorer(db *sqlx.DB) *PostgresStorer {
 	return &PostgresStorer{db: db}
 }
 
-func (postgres *PostgresStorer) CreateProduct(ctx context.Context, p *types.Product) (*types.Product, error) {
-	rows, err := postgres.db.NamedQueryContext(ctx, queryToInsert, p)
+func (postgres *PostgresStorer) CreateProduct(ctx context.Context, p *Product) (*Product, error) {
+	rows, err := postgres.db.NamedQueryContext(ctx, queryToInsertProduct, p)
 	if err != nil {
 		return nil, fmt.Errorf("Error inserting product: %w", err)
 	}
@@ -52,12 +71,12 @@ func (postgres *PostgresStorer) CreateProduct(ctx context.Context, p *types.Prod
 	return p, nil
 }
 
-func (postgres *PostgresStorer) GetProduct(ctx context.Context, id int64) (*types.Product, error) {
-	product := types.Product{}
+func (postgres *PostgresStorer) GetProduct(ctx context.Context, id int64) (*Product, error) {
+	product := Product{}
 	arg := map[string]interface{}{
 		"id": id,
 	}
-	rows, err := postgres.db.NamedQueryContext(ctx, queryToSelect, arg)
+	rows, err := postgres.db.NamedQueryContext(ctx, queryToSelectProduct, arg)
 	if err != nil {
 		return nil, fmt.Errorf("Error getting product: %w", err)
 	}
@@ -75,8 +94,8 @@ func (postgres *PostgresStorer) GetProduct(ctx context.Context, id int64) (*type
 	return &product, nil
 }
 
-func (postgres *PostgresStorer) GetProducts(ctx context.Context) ([]*types.Product, error) {
-	products := []*types.Product{}
+func (postgres *PostgresStorer) GetProducts(ctx context.Context) ([]*Product, error) {
+	products := []*Product{}
 	err := postgres.db.SelectContext(ctx, &products, "SELECT * FROM products")
 	if err != nil {
 		return nil, fmt.Errorf("Error getting products: %w", err)
@@ -88,23 +107,22 @@ func (postgres *PostgresStorer) GetProducts(ctx context.Context) ([]*types.Produ
 	return products, nil
 }
 
-func (postgres *PostgresStorer) UpdateProduct(ctx context.Context, p *types.Product) (*types.Product, error) {
-	updatedProduct := &types.Product{}
-	rows, err := postgres.db.NamedQueryContext(ctx, queryToUpdate, p)
+func (postgres *PostgresStorer) UpdateProduct(ctx context.Context, p *Product) error {
+	rows, err := postgres.db.NamedQueryContext(ctx, queryToUpdateProduct, p)
 	if err != nil {
-		return nil, fmt.Errorf("Error updating product with id %d: %w", p.ID, err)
+		return fmt.Errorf("Error updating product with id %d: %w", p.ID, err)
 	}
 	defer rows.Close()
 
 	if rows.Next() {
-		if err := rows.StructScan(updatedProduct); err != nil {
-			return nil, fmt.Errorf("Error scanning updated product: %w", err)
+		if err := rows.StructScan(p); err != nil {
+			return fmt.Errorf("Error scanning updated product: %w", err)
 		}
 	} else {
-		return nil, fmt.Errorf("Product with id %d not found for update", p.ID)
+		return fmt.Errorf("Product with id %d not found for update", p.ID)
 	}
 
-	return updatedProduct, nil
+	return nil
 }
 
 func (postgres *PostgresStorer) DeleteProduct(ctx context.Context, id int64) error {
@@ -121,5 +139,172 @@ func (postgres *PostgresStorer) DeleteProduct(ctx context.Context, id int64) err
 	if rowsAffected == 0 {
 		return fmt.Errorf("product with id %d not found", id)
 	}
+	return nil
+}
+
+func (postgres *PostgresStorer) CreateOrder(ctx context.Context, order *Order) (*Order, error) {
+	err := postgres.execTx(ctx, func(tx *sqlx.Tx) error {
+		order, err := createOrder(ctx, tx, order)
+		if err != nil {
+			return fmt.Errorf("Error creating order: %w", err)
+		}
+
+		for _, oi := range order.Items {
+			oi.OrderID = order.ID
+			err = createOrderItem(ctx, tx, &oi)
+			if err != nil {
+				return fmt.Errorf("Error creating order item with id %d: %w", oi.ID, err)
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, fmt.Errorf("Error creating order: %w", err)
+	}
+	return order, nil
+}
+
+func createOrder(ctx context.Context, tx *sqlx.Tx, order *Order) (*Order, error) {
+	stmt, err := tx.PrepareNamedContext(ctx, queryToInsertOrder)
+	if err != nil {
+		return nil, fmt.Errorf("Error creating statement: %w", err)
+	}
+	defer stmt.Close()
+
+	rows, err := stmt.QueryxContext(ctx, order)
+
+	if err != nil {
+		return nil, fmt.Errorf("Error creating order: %w", err)
+	}
+
+	defer rows.Close()
+
+	if !rows.Next() {
+		return nil, fmt.Errorf("No rows selected: %w", err)
+	}
+	if err := rows.StructScan(order); err != nil {
+		return nil, fmt.Errorf("Error scanning rows: %w", err)
+	}
+
+	return order, nil
+}
+
+func createOrderItem(ctx context.Context, tx *sqlx.Tx, orderItem *OrderItem) error {
+	stmt, err := tx.PrepareNamedContext(ctx, queryToInsertOrderItem)
+
+	if err != nil {
+		return fmt.Errorf("Error creating statement: %w", err)
+	}
+
+	defer stmt.Close()
+	rows, err := stmt.QueryxContext(ctx, orderItem)
+
+	if err != nil {
+		return fmt.Errorf("Error creating orderItem: %w", err)
+	}
+
+	defer rows.Close()
+
+	if !rows.Next() {
+		return fmt.Errorf("No rows selected: %w", err)
+	}
+	if err := rows.StructScan(orderItem); err != nil {
+		return fmt.Errorf("Error scanning rows: %w", err)
+	}
+
+	return nil
+}
+
+func (postgres *PostgresStorer) GetOrder(ctx context.Context, id int64) (*Order, error) {
+	order := &Order{}
+	rows, err := postgres.db.NamedQueryContext(ctx, queryToGetOrder, id)
+	if err != nil {
+		return nil, fmt.Errorf("Error getting order: %w", err)
+	}
+	defer rows.Close()
+
+	if rows.Next() {
+		if err := rows.StructScan(order); err != nil {
+			return nil, fmt.Errorf("Error scanning rows: %w", err)
+		}
+	} else {
+		return nil, fmt.Errorf("Order with id %d not found", id)
+	}
+
+	var items []OrderItem
+	err = postgres.db.SelectContext(ctx, &items, "SELECT * FROM order_items WHERE order_id=$1", id)
+	if err != nil {
+		return nil, fmt.Errorf("error getting orderItems: %w", err)
+	}
+
+	order.Items = items
+
+	return order, nil
+
+}
+
+func (postgres *PostgresStorer) GetOrders(ctx context.Context) ([]*Order, error) {
+	orders := []*Order{}
+	err := postgres.db.SelectContext(ctx, &orders, "SELECT * FROM orders")
+	if err != nil {
+		return nil, fmt.Errorf("error getting orders: %w", err)
+	}
+
+	for i := range orders {
+		var items []OrderItem
+		err = postgres.db.SelectContext(ctx, &items, "SELECT * FROM order_items WHERE order_id=$1", orders[i].ID)
+
+		if err != nil {
+			return nil, fmt.Errorf("error getting orderItems: %w", err)
+		}
+
+		orders[i].Items = items
+	}
+
+	return orders, nil
+}
+
+func (postgres *PostgresStorer) DeleteOrder(ctx context.Context, id int64) error {
+	err := postgres.execTx(ctx, func(tx *sqlx.Tx) error {
+		_, err := tx.ExecContext(ctx, "DELETE FROM order_items WHERE order_id = $1", id)
+		if err != nil {
+			return fmt.Errorf("error deleting order items: %w", err)
+		}
+
+		_, err = tx.ExecContext(ctx, "DELETE FROM orders WHERE id = $1", id)
+
+		if err != nil {
+			return fmt.Errorf("error deleting order: %w", err)
+		}
+
+		return nil
+	})
+
+	if err != nil {
+		return fmt.Errorf("error deleting order: %w", err)
+	}
+	return nil
+}
+
+func (postgres *PostgresStorer) execTx(ctx context.Context, fn func(*sqlx.Tx) error) error {
+	tx, err := postgres.db.BeginTxx(ctx, nil)
+
+	if err != nil {
+		return fmt.Errorf("error starting transaction: %w", err)
+	}
+
+	err = fn(tx)
+
+	if err != nil {
+		if rbErr := tx.Rollback(); rbErr != nil {
+			return fmt.Errorf("error rolling back transaction: %w", rbErr)
+		}
+		return fmt.Errorf("error in transaction: %w", err)
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("error committing transaction: %w", err)
+	}
+
 	return nil
 }
