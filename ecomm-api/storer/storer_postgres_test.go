@@ -192,3 +192,101 @@ func TestGetProduct(t *testing.T) {
 		})
 	}
 }
+
+func TestGetProducts(t *testing.T) {
+	product1 := types.Product{
+		ID:           1,
+		Name:         "test product1",
+		Image:        "test.jpg",
+		Category:     "test category1",
+		Description:  "test description1",
+		Rating:       5,
+		NumReviews:   10,
+		Price:        100.0,
+		CountInStock: 100,
+	}
+	product2 := types.Product{
+		ID:           1,
+		Name:         "test product1",
+		Image:        "test.jpg",
+		Category:     "test category1",
+		Description:  "test description1",
+		Rating:       5,
+		NumReviews:   10,
+		Price:        100.0,
+		CountInStock: 100,
+	}
+	product3 := types.Product{
+		ID:           1,
+		Name:         "test product1",
+		Image:        "test.jpg",
+		Category:     "test category1",
+		Description:  "test description1",
+		Rating:       5,
+		NumReviews:   10,
+		Price:        100.0,
+		CountInStock: 100,
+	}
+
+	products := []types.Product{product1, product2, product3}
+	tcs := []struct {
+		name string
+		test func(t *testing.T, postgresTest *PostgresStorer, mock sqlmock.Sqlmock)
+	}{
+		{
+			name: "success",
+			test: func(t *testing.T, postgresTest *PostgresStorer, mock sqlmock.Sqlmock) {
+				expectedQuery := regexp.QuoteMeta(`SELECT * FROM products`)
+				columns := []string{"id", "name", "image", "category", "description", "rating", "num_reviews", "price", "count_in_stock", "created_at", "updated_at"}
+				rows := sqlmock.NewRows(columns).
+					AddRow(product1.ID, product1.Name, product1.Image, product1.Category, product1.Description, product1.Rating, product1.NumReviews, product1.Price, product1.CountInStock, product1.CreatedAt, nil).
+					AddRow(product2.ID, product2.Name, product2.Image, product2.Category, product2.Description, product2.Rating, product2.NumReviews, product2.Price, product2.CountInStock, product2.CreatedAt, nil).
+					AddRow(product3.ID, product3.Name, product3.Image, product3.Category, product3.Description, product3.Rating, product3.NumReviews, product3.Price, product3.CountInStock, product3.CreatedAt, nil)
+				mock.ExpectQuery(expectedQuery).WithArgs().WillReturnRows(rows)
+
+				foundProducts, err := postgresTest.GetProducts(context.Background())
+				require.NoError(t, err)
+				require.NotNil(t, foundProducts)
+				require.Equal(t, len(products), len(foundProducts))
+				err = mock.ExpectationsWereMet()
+				require.NoError(t, err)
+			},
+		},
+		{
+			name: "error getting products",
+			test: func(t *testing.T, postgresTest *PostgresStorer, mock sqlmock.Sqlmock) {
+				expectedQuery := regexp.QuoteMeta(`SELECT * FROM products`)
+				mock.ExpectQuery(expectedQuery).WillReturnError(fmt.Errorf("Error getting products"))
+				_, err := postgresTest.GetProducts(context.Background())
+				require.Error(t, err)
+				require.ErrorContains(t, err, fmt.Sprintf("Error getting products"))
+				err = mock.ExpectationsWereMet()
+				require.NoError(t, err)
+			},
+		},
+		{
+			name: "products not found",
+			test: func(t *testing.T, postgresTest *PostgresStorer, mock sqlmock.Sqlmock) {
+				columns := []string{"id", "name", "image", "category", "description", "rating", "num_reviews", "price", "count_in_stock", "created_at", "updated_at"}
+				expectedQuery := regexp.QuoteMeta(`SELECT * FROM products`)
+				rows := sqlmock.NewRows(columns)
+				mock.ExpectQuery(expectedQuery).WillReturnRows(rows)
+				foundProducts, err := postgresTest.GetProducts(context.Background())
+				require.Error(t, err)
+				require.Nil(t, foundProducts)
+				err = mock.ExpectationsWereMet()
+				require.NoError(t, err)
+			},
+		},
+	}
+
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			withTestDB(t, func(db *sqlx.DB, mock sqlmock.Sqlmock) {
+				postgresTest := NewPostgresStorer(db)
+				tc.test(t, postgresTest, mock)
+			})
+		})
+	}
+
+}
