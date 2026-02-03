@@ -2,6 +2,7 @@ package storer
 
 import (
 	"context"
+	"ecomm/domain"
 	"errors"
 	"fmt"
 
@@ -53,7 +54,7 @@ func NewPostgresStorer(db *sqlx.DB) *PostgresStorer {
 	return &PostgresStorer{db: db}
 }
 
-func (postgres *PostgresStorer) CreateProduct(ctx context.Context, p *Product) (*Product, error) {
+func (postgres *PostgresStorer) CreateProduct(ctx context.Context, p *domain.Product) (*domain.Product, error) {
 	rows, err := postgres.db.NamedQueryContext(ctx, queryToInsertProduct, p)
 	if err != nil {
 		return nil, fmt.Errorf("Error inserting product: %w", err)
@@ -71,8 +72,9 @@ func (postgres *PostgresStorer) CreateProduct(ctx context.Context, p *Product) (
 	return p, nil
 }
 
-func (postgres *PostgresStorer) GetProduct(ctx context.Context, id int64) (*Product, error) {
-	product := Product{}
+func (postgres *PostgresStorer) GetProduct(ctx context.Context, id int64) (*domain.Product, error) {
+	op := "storer.GetProduct"
+	product := domain.Product{}
 	arg := map[string]interface{}{
 		"id": id,
 	}
@@ -88,26 +90,27 @@ func (postgres *PostgresStorer) GetProduct(ctx context.Context, id int64) (*Prod
 		}
 	} else {
 		// sql.ErrNoRows здесь не будет, так как Next() просто вернет false
-		return nil, fmt.Errorf("Product with id %d not found", id)
+		return nil, NewProductNotFoundError(op, "product", id, nil)
 	}
 
 	return &product, nil
 }
 
-func (postgres *PostgresStorer) GetProducts(ctx context.Context) ([]*Product, error) {
-	products := []*Product{}
+func (postgres *PostgresStorer) GetProducts(ctx context.Context) ([]*domain.Product, error) {
+	products := []*domain.Product{}
 	err := postgres.db.SelectContext(ctx, &products, "SELECT * FROM products")
 	if err != nil {
 		return nil, fmt.Errorf("Error getting products: %w", err)
 	}
 	if len(products) == 0 {
-		return nil, errors.New("No products found")
+		return []*domain.Product{}, nil
 	}
 
 	return products, nil
 }
 
-func (postgres *PostgresStorer) UpdateProduct(ctx context.Context, p *Product) error {
+func (postgres *PostgresStorer) UpdateProduct(ctx context.Context, p *domain.Product) error {
+	op := "storer.UpdateProduct"
 	rows, err := postgres.db.NamedQueryContext(ctx, queryToUpdateProduct, p)
 	if err != nil {
 		return fmt.Errorf("Error updating product with id %d: %w", p.ID, err)
@@ -119,13 +122,14 @@ func (postgres *PostgresStorer) UpdateProduct(ctx context.Context, p *Product) e
 			return fmt.Errorf("Error scanning updated product: %w", err)
 		}
 	} else {
-		return fmt.Errorf("Product with id %d not found for update", p.ID)
+		return NewProductNotFoundError(op, "product", p.ID, nil)
 	}
 
 	return nil
 }
 
 func (postgres *PostgresStorer) DeleteProduct(ctx context.Context, id int64) error {
+	op := "storer.DeleteProduct"
 	res, err := postgres.db.ExecContext(ctx, "DELETE FROM products WHERE id=$1", id)
 	if err != nil {
 		return fmt.Errorf("failed delete product with id %d: %w", id, err)
@@ -137,12 +141,12 @@ func (postgres *PostgresStorer) DeleteProduct(ctx context.Context, id int64) err
 	}
 
 	if rowsAffected == 0 {
-		return fmt.Errorf("product with id %d not found", id)
+		return NewProductNotFoundError(op, "product", id, nil)
 	}
 	return nil
 }
 
-func (postgres *PostgresStorer) CreateOrder(ctx context.Context, order *Order) (*Order, error) {
+func (postgres *PostgresStorer) CreateOrder(ctx context.Context, order *domain.Order) (*domain.Order, error) {
 	err := postgres.execTx(ctx, func(tx *sqlx.Tx) error {
 		order, err := createOrder(ctx, tx, order)
 		if err != nil {
@@ -164,7 +168,7 @@ func (postgres *PostgresStorer) CreateOrder(ctx context.Context, order *Order) (
 	return order, nil
 }
 
-func createOrder(ctx context.Context, tx *sqlx.Tx, order *Order) (*Order, error) {
+func createOrder(ctx context.Context, tx *sqlx.Tx, order *domain.Order) (*domain.Order, error) {
 	stmt, err := tx.PrepareNamedContext(ctx, queryToInsertOrder)
 	if err != nil {
 		return nil, fmt.Errorf("Error creating statement: %w", err)
@@ -189,7 +193,7 @@ func createOrder(ctx context.Context, tx *sqlx.Tx, order *Order) (*Order, error)
 	return order, nil
 }
 
-func createOrderItem(ctx context.Context, tx *sqlx.Tx, orderItem *OrderItem) error {
+func createOrderItem(ctx context.Context, tx *sqlx.Tx, orderItem *domain.OrderItem) error {
 	stmt, err := tx.PrepareNamedContext(ctx, queryToInsertOrderItem)
 
 	if err != nil {
@@ -215,8 +219,8 @@ func createOrderItem(ctx context.Context, tx *sqlx.Tx, orderItem *OrderItem) err
 	return nil
 }
 
-func (postgres *PostgresStorer) GetOrder(ctx context.Context, id int64) (*Order, error) {
-	order := &Order{}
+func (postgres *PostgresStorer) GetOrder(ctx context.Context, id int64) (*domain.Order, error) {
+	order := &domain.Order{}
 	rows, err := postgres.db.NamedQueryContext(ctx, queryToGetOrder, id)
 	if err != nil {
 		return nil, fmt.Errorf("Error getting order: %w", err)
@@ -231,7 +235,7 @@ func (postgres *PostgresStorer) GetOrder(ctx context.Context, id int64) (*Order,
 		return nil, fmt.Errorf("Order with id %d not found", id)
 	}
 
-	var items []OrderItem
+	var items []domain.OrderItem
 	err = postgres.db.SelectContext(ctx, &items, "SELECT * FROM order_items WHERE order_id=$1", id)
 	if err != nil {
 		return nil, fmt.Errorf("error getting orderItems: %w", err)
@@ -243,15 +247,15 @@ func (postgres *PostgresStorer) GetOrder(ctx context.Context, id int64) (*Order,
 
 }
 
-func (postgres *PostgresStorer) GetOrders(ctx context.Context) ([]*Order, error) {
-	orders := []*Order{}
+func (postgres *PostgresStorer) GetOrders(ctx context.Context) ([]*domain.Order, error) {
+	orders := []*domain.Order{}
 	err := postgres.db.SelectContext(ctx, &orders, "SELECT * FROM orders")
 	if err != nil {
 		return nil, fmt.Errorf("error getting orders: %w", err)
 	}
 
 	for i := range orders {
-		var items []OrderItem
+		var items []domain.OrderItem
 		err = postgres.db.SelectContext(ctx, &items, "SELECT * FROM order_items WHERE order_id=$1", orders[i].ID)
 
 		if err != nil {

@@ -4,6 +4,8 @@ import (
 	"fmt"
 
 	"github.com/jmoiron/sqlx"
+
+	_ "github.com/lib/pq"
 )
 
 type Database struct {
@@ -11,7 +13,7 @@ type Database struct {
 }
 
 func NewDatabase() (*Database, error) {
-	db, err := sqlx.Open("postgres", "postgres:postgres@tcp(localhost:5433)/ecomm")
+	db, err := sqlx.Open("postgres", "postgres://postgres:postgres@localhost:5433/ecomm?sslmode=disable")
 	if err != nil {
 		return nil, fmt.Errorf("error opening database: %w", err)
 	}

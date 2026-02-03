@@ -2,6 +2,7 @@ package storer
 
 import (
 	"context"
+	"ecomm/domain"
 	"fmt"
 	"regexp"
 	"testing"
@@ -12,8 +13,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func newSingleProductForUpdateTesting() Product {
-	return Product{
+func newSingleProductForUpdateTesting() domain.Product {
+	return domain.Product{
 		ID:           1,
 		Name:         "test product",
 		Image:        "test.jpg",
@@ -35,7 +36,7 @@ func withTestDB(t *testing.T, fn func(*sqlx.DB, sqlmock.Sqlmock)) {
 }
 
 func TestCreateProduct(t *testing.T) {
-	p := &Product{
+	p := &domain.Product{
 		Name:         "test product",
 		Image:        "test.jpg",
 		Category:     "test category",
@@ -116,7 +117,7 @@ func TestCreateProduct(t *testing.T) {
 }
 
 func TestGetProduct(t *testing.T) {
-	p := &Product{
+	p := &domain.Product{
 		ID:           1,
 		Name:         "test product",
 		Image:        "test.jpg",
@@ -207,7 +208,7 @@ func TestGetProduct(t *testing.T) {
 }
 
 func TestGetProducts(t *testing.T) {
-	product1 := Product{
+	product1 := domain.Product{
 		ID:           1,
 		Name:         "test product1",
 		Image:        "test.jpg",
@@ -218,7 +219,7 @@ func TestGetProducts(t *testing.T) {
 		Price:        100.0,
 		CountInStock: 100,
 	}
-	product2 := Product{
+	product2 := domain.Product{
 		ID:           1,
 		Name:         "test product1",
 		Image:        "test.jpg",
@@ -229,7 +230,7 @@ func TestGetProducts(t *testing.T) {
 		Price:        100.0,
 		CountInStock: 100,
 	}
-	product3 := Product{
+	product3 := domain.Product{
 		ID:           1,
 		Name:         "test product1",
 		Image:        "test.jpg",
@@ -241,7 +242,7 @@ func TestGetProducts(t *testing.T) {
 		CountInStock: 100,
 	}
 
-	products := []Product{product1, product2, product3}
+	products := []domain.Product{product1, product2, product3}
 	tcs := []struct {
 		name string
 		test func(t *testing.T, postgresTest *PostgresStorer, mock sqlmock.Sqlmock)
@@ -285,8 +286,8 @@ func TestGetProducts(t *testing.T) {
 				rows := sqlmock.NewRows(columns)
 				mock.ExpectQuery(expectedQuery).WillReturnRows(rows)
 				foundProducts, err := postgresTest.GetProducts(context.Background())
-				require.Error(t, err)
-				require.Nil(t, foundProducts)
+				require.NoError(t, err)
+				require.Empty(t, foundProducts)
 				err = mock.ExpectationsWereMet()
 				require.NoError(t, err)
 			},
@@ -424,7 +425,7 @@ func TestUpdateProduct(t *testing.T) {
 }
 
 func TestDeleteProduct(t *testing.T) {
-	product := Product{
+	product := domain.Product{
 		ID:           1,
 		Name:         "test product",
 		Image:        "test.jpg",
