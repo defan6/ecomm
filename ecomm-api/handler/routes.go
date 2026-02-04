@@ -21,6 +21,8 @@ func RegisterRoutes(handler *handler) *chi.Mux {
 		r.Post("/", handler.createOrder)
 	})
 
+	r.Post("/login", handler.LoginUser) // Новый маршрут для входа
+
 	return r
 }
 

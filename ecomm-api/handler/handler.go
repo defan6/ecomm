@@ -1,9 +1,11 @@
 package handler
 
 import (
+	authDto "ecomm/ecomm-api/handler/dto/auth" // Добавить импорт для DTO аутентификации
 	orderDto "ecomm/ecomm-api/handler/dto/order"
-	"ecomm/ecomm-api/handler/dto/product"
+	productDto "ecomm/ecomm-api/handler/dto/product"
 	"ecomm/ecomm-api/service"
+	"ecomm/util"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -184,4 +186,35 @@ func (h *handler) createOrder(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	respondWithJSON(w, http.StatusCreated, orderRes)
+}
+
+// LoginUser обрабатывает запросы на вход пользователя.
+func (h *handler) LoginUser(w http.ResponseWriter, r *http.Request) {
+	var req authDto.LoginRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		responseWithError(w, r, errors.New("invalid request payload"))
+		return
+	}
+
+	// TODO: Здесь должна быть реальная логика проверки учетных данных пользователя (из БД, например)
+	// и получение user ID.
+	// Для примера, используем хардкод:
+	if req.Email != "test@example.com" || req.Password != "password" {
+		responseWithError(w, r, errors.New("invalid credentials"))
+		return
+	}
+	userID := "some-user-id-from-db" // Замените на реальный userID после аутентификации
+
+	// Генерация Access Token
+	accessToken, err := service.GenerateToken(userID, util.GetAccessTokenExpiration())
+	if err != nil {
+		responseWithError(w, r, fmt.Errorf("failed to generate access token: %w", err))
+		return
+	}
+
+	resp := authDto.LoginResponse{
+		AccessToken: accessToken,
+	}
+
+	respondWithJSON(w, http.StatusOK, resp)
 }
