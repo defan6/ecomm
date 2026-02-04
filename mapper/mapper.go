@@ -2,6 +2,7 @@ package mapper
 
 import (
 	"ecomm/domain"
+	orderDto "ecomm/ecomm-api/handler/dto/order"
 	productDto "ecomm/ecomm-api/handler/dto/product"
 )
 
@@ -55,4 +56,57 @@ func MapToProductResList(products []*domain.Product) []productDto.ProductRes {
 	}
 
 	return productResList
+}
+
+func MapToOrderFromCreateOrderReq(orderReq *orderDto.CreateOrderReq) *domain.Order {
+	var orderItems []domain.OrderItem
+
+	for _, item := range orderReq.Items {
+		orderItem := mapToOrderItemFromOrderItemReq(item)
+		orderItems = append(orderItems, orderItem)
+	}
+
+	return &domain.Order{
+		PaymentMethod: orderReq.PaymentMethod,
+		Items:         orderItems,
+	}
+}
+
+func mapToOrderItemFromOrderItemReq(orderItemReq orderDto.CreateOrderItemReq) domain.OrderItem {
+	return domain.OrderItem{
+		ProductID: orderItemReq.ProductID,
+		Quantity:  orderItemReq.Quantity,
+	}
+}
+
+func mapToOrderItemResFromOrderItem(orderItem domain.OrderItem) orderDto.OrderItemRes {
+	return orderDto.OrderItemRes{
+		ID:        orderItem.ID,
+		Name:      orderItem.Name,
+		Quantity:  orderItem.Quantity,
+		Image:     orderItem.Image,
+		Price:     orderItem.Price,
+		ProductID: orderItem.ProductID,
+		OrderID:   orderItem.OrderID,
+	}
+}
+
+func MapToOrderRes(order *domain.Order) orderDto.OrderRes {
+	var orderItemsRes []orderDto.OrderItemRes
+
+	for _, item := range order.Items {
+		orderItemRes := mapToOrderItemResFromOrderItem(item)
+		orderItemsRes = append(orderItemsRes, orderItemRes)
+	}
+
+	return orderDto.OrderRes{
+		ID:            order.ID,
+		PaymentMethod: order.PaymentMethod,
+		TaxPrice:      order.TaxPrice,
+		ShippingPrice: order.ShippingPrice,
+		TotalPrice:    order.TotalPrice,
+		Items:         orderItemsRes,
+		CreatedAt:     order.CreatedAt,
+		UpdatedAt:     order.UpdatedAt,
+	}
 }

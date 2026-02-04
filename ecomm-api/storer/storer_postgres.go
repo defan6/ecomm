@@ -90,10 +90,28 @@ func (postgres *PostgresStorer) GetProduct(ctx context.Context, id int64) (*doma
 		}
 	} else {
 		// sql.ErrNoRows здесь не будет, так как Next() просто вернет false
-		return nil, NewProductNotFoundError(op, "product", id, nil)
+		return nil, NewNotFoundError(op, "product", id, nil)
 	}
 
 	return &product, nil
+}
+
+func (postgres *PostgresStorer) GetProductsByIDs(ctx context.Context, ids []int64) ([]*domain.Product, error) {
+	if len(ids) == 0 {
+		return []*domain.Product{}, nil
+	}
+	query := "SELECT * FROM products WHERE id IN (?)"
+	query, args, err := sqlx.In(query, ids)
+	if err != nil {
+		return nil, fmt.Errorf("Error building query: %w", err)
+	}
+	query = postgres.db.Rebind(query)
+	var products []*domain.Product
+	if err := postgres.db.SelectContext(ctx, &products, query, args...); err != nil {
+		return nil, fmt.Errorf("Error getting products: %w", err)
+	}
+
+	return products, nil
 }
 
 func (postgres *PostgresStorer) GetProducts(ctx context.Context) ([]*domain.Product, error) {
@@ -122,7 +140,7 @@ func (postgres *PostgresStorer) UpdateProduct(ctx context.Context, p *domain.Pro
 			return fmt.Errorf("Error scanning updated product: %w", err)
 		}
 	} else {
-		return NewProductNotFoundError(op, "product", p.ID, nil)
+		return NewNotFoundError(op, "product", p.ID, nil)
 	}
 
 	return nil
@@ -141,7 +159,7 @@ func (postgres *PostgresStorer) DeleteProduct(ctx context.Context, id int64) err
 	}
 
 	if rowsAffected == 0 {
-		return NewProductNotFoundError(op, "product", id, nil)
+		return NewNotFoundError(op, "product", id, nil)
 	}
 	return nil
 }

@@ -1,9 +1,9 @@
 package handler
 
 import (
+	orderDto "ecomm/ecomm-api/handler/dto/order"
 	"ecomm/ecomm-api/handler/dto/product"
 	"ecomm/ecomm-api/service"
-	"ecomm/ecomm-api/storer"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -26,12 +26,12 @@ type APIErrorResponse struct {
 func responseWithError(w http.ResponseWriter, r *http.Request, err error) {
 
 	var clientMessage = "Internal Server Error"
-	var productNotFoundError *storer.ProductNotFoundError
+	var errNotFound *service.ErrNotFound
 	var apiError APIErrorResponse
 
-	if errors.As(err, &productNotFoundError) {
+	if errors.As(err, &errNotFound) {
 		log.Printf("API Error: status=%d, details=%v, endpoint=%s", http.StatusNotFound, err, r.URL.Path)
-		clientMessage = fmt.Sprintf("Product with id %d not found", productNotFoundError.ID)
+		clientMessage = fmt.Sprintf("Product with id %d not found", errNotFound.ID)
 		apiError = APIErrorResponse{
 			Error:    clientMessage,
 			Status:   http.StatusNotFound,
@@ -159,4 +159,18 @@ func (h *handler) deleteProduct(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	respondWithJSON(w, http.StatusNoContent, nil)
+}
+
+func (h *handler) createOrder(w http.ResponseWriter, r *http.Request) {
+	var createOrderReq orderDto.CreateOrderReq
+	if err := json.NewDecoder(r.Body).Decode(&createOrderReq); err != nil {
+		responseWithError(w, r, err)
+		return
+	}
+	orderRes, err := h.service.CreateOrder(r.Context(), &createOrderReq)
+	if err != nil {
+		responseWithError(w, r, err)
+		return
+	}
+	respondWithJSON(w, http.StatusCreated, orderRes)
 }

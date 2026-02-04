@@ -17,6 +17,9 @@ func RegisterRoutes(handler *handler) *chi.Mux {
 		r.Put("/{id}", handler.updateProduct)
 		r.Delete("/{id}", handler.deleteProduct)
 	})
+	r.Route("/orders", func(r chi.Router) {
+		r.Post("/", handler.createOrder)
+	})
 
 	return r
 }
