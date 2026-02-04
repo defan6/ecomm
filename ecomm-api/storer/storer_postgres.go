@@ -14,40 +14,15 @@ type PostgresStorer struct {
 }
 
 const (
-	queryToInsertProduct = `
-			INSERT INTO products
-			(name, image, category, description, rating, num_reviews, price, count_in_stock)
-			 VALUES 
-			(:name, :image, :category, :description, :rating, :num_reviews, :price, :count_in_stock)
-			RETURNING *
-			`
-	queryToSelectProduct = `SELECT * FROM products WHERE id=:id`
+	queryToInsertProduct = "INSERT INTO products (name, image, category, description, rating, num_reviews, price, count_in_stock) VALUES (:name, :image, :category, :description, :rating, :num_reviews, :price, :count_in_stock) RETURNING *"
+	queryToSelectProduct = "SELECT * FROM products WHERE id=:id"
 
-	queryToUpdateProduct = `UPDATE products SET
-	name=:name, image=:image, category=:category, description=:description, rating=:rating, num_reviews=:num_reviews, price=:price, count_in_stock=:count_in_stock, updated_at=NOW()
-	WHERE id=:id
-	RETURNING *
-	`
+	queryToUpdateProduct = "UPDATE products SET name=:name, image=:image, category=:category, description=:description, rating=:rating, num_reviews=:num_reviews, price=:price, count_in_stock=:count_in_stock, updated_at=NOW() WHERE id=:id RETURNING *"
 
-	queryToInsertOrder = `
-	INSERT INTO orders
-	(payment_method, tax_price, shipping_price, total_price) 
-	VALUES
-	(:payment_method, :tax_price, :shipping_price, :total_price)
-	RETURNING *
-	`
+	queryToInsertOrder     = "INSERT INTO orders (payment_method, tax_price, shipping_price, total_price) VALUES (:payment_method, :tax_price, :shipping_price, :total_price) RETURNING *"
+	queryToInsertOrderItem = "INSERT INTO order_items (name, quantity, image, price, product_id, order_id) VALUES (:name, :quantity, :image, :price, :product_id, :order_id) RETURNING *"
 
-	queryToInsertOrderItem = `
-	INSERT INTO order_items
-	(name, quantity, image, price, product_id, order_id)
-	VALUES
-	(:name, :quantity, :image, :price, :product_id,:order_id)
-	RETURNING *
-	`
-
-	queryToGetOrder = `
-	SELECT * FROM orders WHERE id=:id
-	`
+	queryToGetOrder = "SELECT * FROM orders WHERE id=:id"
 )
 
 func NewPostgresStorer(db *sqlx.DB) *PostgresStorer {
@@ -166,23 +141,29 @@ func (postgres *PostgresStorer) DeleteProduct(ctx context.Context, id int64) err
 
 func (postgres *PostgresStorer) CreateOrder(ctx context.Context, order *domain.Order) (*domain.Order, error) {
 	err := postgres.execTx(ctx, func(tx *sqlx.Tx) error {
-		order, err := createOrder(ctx, tx, order)
-		if err != nil {
-			return fmt.Errorf("Error creating order: %w", err)
+		// `createOrder` вернет тот же указатель, но с обновленным ID
+		var txErr error
+		_, txErr = createOrder(ctx, tx, order)
+		if txErr != nil {
+			return fmt.Errorf("error creating order row: %w", txErr)
 		}
 
-		for _, oi := range order.Items {
-			oi.OrderID = order.ID
-			err = createOrderItem(ctx, tx, &oi)
-			if err != nil {
-				return fmt.Errorf("Error creating order item with id %d: %w", oi.ID, err)
+		// Теперь order.ID корректно установлен, и мы можем использовать его
+		for i := range order.Items {
+			// Присваиваем ID заказа каждому элементу
+			order.Items[i].OrderID = order.ID
+
+			txErr = createOrderItem(ctx, tx, &order.Items[i])
+			if txErr != nil {
+				return fmt.Errorf("error creating order item row: %w", txErr)
 			}
 		}
 		return nil
 	})
 	if err != nil {
-		return nil, fmt.Errorf("Error creating order: %w", err)
+		return nil, err // Возвращаем ошибку, если транзакция не удалась
 	}
+	// Возвращаем измененный оригинальный объект
 	return order, nil
 }
 

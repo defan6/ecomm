@@ -24,32 +24,45 @@ type APIErrorResponse struct {
 }
 
 func responseWithError(w http.ResponseWriter, r *http.Request, err error) {
+	var (
+		clientMessage              = "Internal Server Error"
+		errNotFound                *service.ErrNotFound
+		errNotEnough               *service.ErrNotEnoughStock
+		errNotFoundProductForOrder *service.ErrNotFoundProductForOrder
+		apiError                   APIErrorResponse
+		status                     = http.StatusInternalServerError
+	)
 
-	var clientMessage = "Internal Server Error"
-	var errNotFound *service.ErrNotFound
-	var apiError APIErrorResponse
-
-	if errors.As(err, &errNotFound) {
-		log.Printf("API Error: status=%d, details=%v, endpoint=%s", http.StatusNotFound, err, r.URL.Path)
+	switch {
+	case errors.As(err, &errNotFound):
+		status = http.StatusNotFound
 		clientMessage = fmt.Sprintf("Product with id %d not found", errNotFound.ID)
-		apiError = APIErrorResponse{
-			Error:    clientMessage,
-			Status:   http.StatusNotFound,
-			Endpoint: r.URL.Path,
-			Method:   r.Method,
-			Time:     time.Now(),
-		}
-	} else {
-		log.Printf("API Error: status=%d, details=%v, endpoint=%s", http.StatusInternalServerError, err, r.URL.Path)
-		apiError = APIErrorResponse{
-			Error:    clientMessage,
-			Status:   http.StatusInternalServerError,
-			Endpoint: r.URL.Path,
-			Method:   r.Method,
-			Time:     time.Now(),
-		}
+
+	case errors.As(err, &errNotEnough):
+		status = http.StatusConflict
+		clientMessage = fmt.Sprintf("not enough stock for product with id %d. Requested: %d, Available: %d",
+			errNotEnough.ID, errNotEnough.Requested, errNotEnough.Available)
+	case errors.As(err, &errNotFoundProductForOrder):
+		status = http.StatusNotFound
+		clientMessage = fmt.Sprintf("Some product for order not found")
+	default:
+		// оставляем Internal Server Error
 	}
-	respondWithJSON(w, apiError.Status, apiError)
+
+	log.Printf(
+		"API Error: status=%d, details=%v, endpoint=%s",
+		status, err, r.URL.Path,
+	)
+
+	apiError = APIErrorResponse{
+		Error:    clientMessage,
+		Status:   status,
+		Endpoint: r.URL.Path,
+		Method:   r.Method,
+		Time:     time.Now(),
+	}
+
+	respondWithJSON(w, status, apiError)
 }
 
 func respondWithJSON(w http.ResponseWriter, code int, payload interface{}) {
@@ -126,8 +139,7 @@ func (h *handler) getProducts(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *handler) updateProduct(w http.ResponseWriter, r *http.Request) {
-	id := chi.URLParam(r, "id")
-	i, err := strconv.ParseInt(id, 10, 64)
+	id, err := extractAndParseId(r)
 	if err != nil {
 		responseWithError(w, r, err)
 		return
@@ -138,7 +150,7 @@ func (h *handler) updateProduct(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	productRes, err := h.service.UpdateProduct(r.Context(), i, &updateProductReq)
+	productRes, err := h.service.UpdateProduct(r.Context(), id, &updateProductReq)
 	if err != nil {
 		responseWithError(w, r, err)
 		return
@@ -147,13 +159,12 @@ func (h *handler) updateProduct(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *handler) deleteProduct(w http.ResponseWriter, r *http.Request) {
-	id := chi.URLParam(r, "id")
-	i, err := strconv.ParseInt(id, 10, 64)
+	id, err := extractAndParseId(r)
 	if err != nil {
 		responseWithError(w, r, err)
 		return
 	}
-	err = h.service.DeleteProduct(r.Context(), i)
+	err = h.service.DeleteProduct(r.Context(), id)
 	if err != nil {
 		responseWithError(w, r, err)
 		return

@@ -98,6 +98,7 @@ func (s *Service) DeleteProduct(ctx context.Context, id int64) error {
 }
 
 func (s *Service) CreateOrder(ctx context.Context, createOrderReq *orderDto.CreateOrderReq) (orderDto.OrderRes, error) {
+	op := "createOrder"
 
 	if createOrderReq.PaymentMethod == "" {
 		return orderDto.OrderRes{}, errors.New("payment method is required")
@@ -126,7 +127,7 @@ func (s *Service) CreateOrder(ctx context.Context, createOrderReq *orderDto.Crea
 	}
 
 	if len(products) != len(uniqueProductIDs) {
-		return orderDto.OrderRes{}, errors.New("one or more products not found")
+		return orderDto.OrderRes{}, NewErrNotFoundProductForOrder(op, "product", nil)
 	}
 
 	productMap := make(map[int64]*domain.Product, len(products))
@@ -142,8 +143,8 @@ func (s *Service) CreateOrder(ctx context.Context, createOrderReq *orderDto.Crea
 		product := productMap[item.ProductID]
 
 		if product.CountInStock < item.Quantity {
-			return orderDto.OrderRes{}, fmt.Errorf("not enough stock for product: %d (%s). Requested: %d, Available: %d",
-				product.ID, product.Name, item.Quantity, product.CountInStock)
+			return orderDto.OrderRes{},
+				NewNotEnoughStock(op, "product", product.ID, item.Quantity, product.CountInStock, nil)
 		}
 
 		orderItem := domain.OrderItem{
