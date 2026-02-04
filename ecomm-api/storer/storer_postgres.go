@@ -23,6 +23,8 @@ const (
 	queryToInsertOrderItem = "INSERT INTO order_items (name, quantity, image, price, product_id, order_id) VALUES (:name, :quantity, :image, :price, :product_id, :order_id) RETURNING *"
 
 	queryToGetOrder = "SELECT * FROM orders WHERE id=:id"
+
+	queryToInsertUser = "INSERT INTO users (name, email, password, is_admin) VALUES (:name, :email, :password, :is_admin) RETURNING *"
 )
 
 func NewPostgresStorer(db *sqlx.DB) *PostgresStorer {
@@ -309,5 +311,22 @@ func (postgres *PostgresStorer) execTx(ctx context.Context, fn func(*sqlx.Tx) er
 		return fmt.Errorf("error committing transaction: %w", err)
 	}
 
+	return nil
+}
+
+func (postgres *PostgresStorer) RegisterUser(ctx context.Context, user *domain.User) error {
+	rows, err := postgres.db.NamedQueryContext(ctx, queryToInsertUser, user)
+	if err != nil {
+		return fmt.Errorf("error inserting user: %w", err)
+	}
+	defer rows.Close()
+	if rows.Next() {
+		if err := rows.StructScan(user); err != nil {
+			return fmt.Errorf("error scanning rows: %w", err)
+		}
+
+	} else {
+		return fmt.Errorf("user not created")
+	}
 	return nil
 }

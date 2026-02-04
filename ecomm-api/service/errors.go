@@ -89,3 +89,29 @@ func (e *ErrNotFoundProductForOrder) Error() string {
 func (e *ErrNotFoundProductForOrder) Unwrap() error {
 	return e.Err
 }
+
+type ErrUserWithThatEmailAlreadyExists struct {
+	Op        string
+	Resource  string
+	ID        interface{}
+	Timestamp time.Time
+	Err       error
+}
+
+func NewErrUserWithThatEmailAlreadyExists(op string, resource string, id interface{}, err error) *ErrUserWithThatEmailAlreadyExists {
+	return &ErrUserWithThatEmailAlreadyExists{
+		Op:        op,
+		Resource:  resource,
+		ID:        id,
+		Timestamp: time.Now(),
+		Err:       err,
+	}
+}
+
+func (e *ErrUserWithThatEmailAlreadyExists) Error() string {
+	return fmt.Sprintf("operation %s: Some %s not found", e.Op, e.Resource)
+}
+
+func (e *ErrUserWithThatEmailAlreadyExists) Unwrap() error {
+	return e.Err
+}

@@ -5,6 +5,7 @@ import (
 	"ecomm/ecomm-api/handler"
 	"ecomm/ecomm-api/service"
 	"ecomm/ecomm-api/storer"
+	"ecomm/util"
 	"log"
 )
 
@@ -16,9 +17,16 @@ func main() {
 	defer db.Close()
 	log.Println("successfully connected to database")
 
-	postgres := storer.NewPostgresStorer(db.GetDB())
-	srv := service.NewService(postgres)
-	hdl := handler.NewHandler(srv)
-	handler.RegisterRoutes(hdl)
+	postgresStorer := storer.NewPostgresStorer(db.GetDB())
+	passwordEncoder := util.NewPasswordEncoder()
+
+	productService := service.NewProductService(postgresStorer)
+	orderService := service.NewOrderService(postgresStorer)
+	authService := service.NewAuthService(postgresStorer, passwordEncoder, nil)
+	productHandler := handler.NewProductHandler(productService)
+	orderHandler := handler.NewOrderHandler(orderService)
+	authHandler := handler.NewAuthHandler(authService)
+	routeManager := handler.NewRouterManager(authHandler, productHandler, orderHandler)
+	routeManager.RegisterRoutes()
 	handler.Start(":8080")
 }

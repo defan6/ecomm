@@ -2,6 +2,7 @@ package mapper
 
 import (
 	"ecomm/domain"
+	authDto "ecomm/ecomm-api/handler/dto/auth"
 	orderDto "ecomm/ecomm-api/handler/dto/order"
 	productDto "ecomm/ecomm-api/handler/dto/product"
 )
@@ -108,5 +109,23 @@ func MapToOrderRes(order *domain.Order) orderDto.OrderRes {
 		Items:         orderItemsRes,
 		CreatedAt:     order.CreatedAt,
 		UpdatedAt:     order.UpdatedAt,
+	}
+}
+
+func MapToUserFromRegisterReq(req *authDto.RegisterRequest) *domain.User {
+	return &domain.User{
+		Name:     req.Name,
+		Email:    req.Email,
+		Password: req.Password,
+	}
+}
+
+func MapToUserResFromUser(user *domain.User) authDto.RegisterResponse {
+	return authDto.RegisterResponse{
+		ID:        user.ID,
+		Email:     user.Email,
+		Name:      user.Name,
+		CreatedAt: user.CreatedAt,
+		UpdatedAt: user.UpdatedAt,
 	}
 }
