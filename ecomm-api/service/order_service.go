@@ -96,6 +96,7 @@ func (s *OrderService) CreateOrder(ctx context.Context, createOrderReq *orderDto
 		ShippingPrice: shippingPrice,
 		TotalPrice:    totalPrice,
 		Items:         domainItems,
+		UserID:        createOrderReq.UserID,
 	}
 
 	createdOrder, err := s.orderStorer.CreateOrder(ctx, &orderToCreate)

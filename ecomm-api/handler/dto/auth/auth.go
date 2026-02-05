@@ -1,5 +1,7 @@
 package auth
 
+import "time"
+
 // LoginRequest определяет структуру для запроса входа
 type LoginRequest struct {
 	Email    string `json:"email"`
@@ -19,9 +21,9 @@ type RegisterRequest struct {
 }
 
 type RegisterResponse struct {
-	ID        int64  `json:"id"`
-	Name      string `json:"name"`
-	Email     string `json:"email"`
-	CreatedAt string `db:"created_at"`
-	UpdatedAt string `db:"updated_at"`
+	ID        int64      `json:"id"`
+	Name      string     `json:"name"`
+	Email     string     `json:"email"`
+	CreatedAt time.Time  `db:"created_at"`
+	UpdatedAt *time.Time `db:"updated_at"`
 }

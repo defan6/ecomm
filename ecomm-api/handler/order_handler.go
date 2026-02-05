@@ -25,6 +25,8 @@ func (h *OrderHandler) createOrder(w http.ResponseWriter, r *http.Request) {
 		responseWithError(w, r, err)
 		return
 	}
+	userID, _ := GetUserIDFromContext(r.Context())
+	createOrderReq.UserID = userID
 	orderRes, err := h.orderService.CreateOrder(r.Context(), &createOrderReq)
 	if err != nil {
 		responseWithError(w, r, err)

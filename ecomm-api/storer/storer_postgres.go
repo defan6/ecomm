@@ -19,7 +19,7 @@ const (
 
 	queryToUpdateProduct = "UPDATE products SET name=:name, image=:image, category=:category, description=:description, rating=:rating, num_reviews=:num_reviews, price=:price, count_in_stock=:count_in_stock, updated_at=NOW() WHERE id=:id RETURNING *"
 
-	queryToInsertOrder     = "INSERT INTO orders (payment_method, tax_price, shipping_price, total_price) VALUES (:payment_method, :tax_price, :shipping_price, :total_price) RETURNING *"
+	queryToInsertOrder     = "INSERT INTO orders (payment_method, tax_price, shipping_price, total_price, user_id) VALUES (:payment_method, :tax_price, :shipping_price, :total_price, :user_id) RETURNING *"
 	queryToInsertOrderItem = "INSERT INTO order_items (name, quantity, image, price, product_id, order_id) VALUES (:name, :quantity, :image, :price, :product_id, :order_id) RETURNING *"
 
 	queryToGetOrder = "SELECT * FROM orders WHERE id=:id"

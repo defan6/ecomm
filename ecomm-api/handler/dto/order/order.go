@@ -4,6 +4,7 @@ import "time"
 
 type CreateOrderReq struct {
 	PaymentMethod string `json:"payment_method"`
+	UserID        int64
 	Items         []CreateOrderItemReq
 }
 
@@ -28,6 +29,7 @@ type OrderRes struct {
 	TaxPrice      float64        `json:"tax_price"`
 	ShippingPrice float64        `json:"shipping_price"`
 	TotalPrice    float64        `json:"total_price"`
+	UserID        int64          `json:"user_id"`
 	Items         []OrderItemRes `json:"items"`
 	CreatedAt     time.Time      `json:"created_at"`
 	UpdatedAt     *time.Time     `json:"updated_at"`

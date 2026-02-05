@@ -1,9 +1,11 @@
 package handler
 
 import (
+	"ecomm/util"
 	"net/http"
 
 	"github.com/go-chi/chi"
+	"github.com/go-chi/chi/middleware"
 )
 
 var r *chi.Mux
@@ -24,21 +26,25 @@ func NewRouterManager(ah *AuthHandler, ph *ProductHandler, oh *OrderHandler) *Ro
 
 func (rm *RouterManager) RegisterRoutes() *chi.Mux {
 	r = chi.NewRouter()
-	r.Route("/products", func(r chi.Router) {
-		r.Post("/", rm.ProductHandler.createProduct)
-		r.Get("/{id}", rm.ProductHandler.getProduct)
-		r.Get("/", rm.ProductHandler.getProducts)
-		r.Put("/{id}", rm.ProductHandler.updateProduct)
-		r.Delete("/{id}", rm.ProductHandler.deleteProduct)
-	})
-	r.Route("/orders", func(r chi.Router) {
-		r.Post("/", rm.OrderHandler.createOrder)
+
+	r.Use(middleware.Recoverer)
+	tokenValidator := util.NewJwtTokenValidator()
+	r.Group(func(r chi.Router) {
+		r.Use(AuthMiddleware(tokenValidator))
+		r.Route("/products", func(r chi.Router) {
+			r.Post("/", rm.ProductHandler.createProduct)
+			r.Get("/{id}", rm.ProductHandler.getProduct)
+			r.Get("/", rm.ProductHandler.getProducts)
+			r.Put("/{id}", rm.ProductHandler.updateProduct)
+			r.Delete("/{id}", rm.ProductHandler.deleteProduct)
+		})
+		r.Route("/orders", func(r chi.Router) {
+			r.Post("/", rm.OrderHandler.createOrder)
+		})
 	})
 
-	r.Route("/users", func(r chi.Router) {
-		r.Post("/login", rm.AuthHandler.Authenticate)
-		r.Post("/register", rm.AuthHandler.Register)
-	})
+	r.Post("/login", rm.AuthHandler.Authenticate)
+	r.Post("/register", rm.AuthHandler.Register)
 
 	return r
 }

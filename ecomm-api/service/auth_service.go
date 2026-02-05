@@ -24,6 +24,10 @@ type PasswordEncoder interface {
 type TokenGenerator interface {
 	GenerateToken(userID string, duration time.Duration) (string, error)
 }
+
+type TokenValidator interface {
+	ValidateToken(tokenString string) (*util.JWTClaims, error)
+}
 type AuthService struct {
 	userStorer      UserStorer
 	passwordEncoder PasswordEncoder

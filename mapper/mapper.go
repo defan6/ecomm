@@ -69,6 +69,7 @@ func MapToOrderFromCreateOrderReq(orderReq *orderDto.CreateOrderReq) *domain.Ord
 
 	return &domain.Order{
 		PaymentMethod: orderReq.PaymentMethod,
+		UserID:        orderReq.UserID,
 		Items:         orderItems,
 	}
 }
@@ -107,6 +108,7 @@ func MapToOrderRes(order *domain.Order) orderDto.OrderRes {
 		ShippingPrice: order.ShippingPrice,
 		TotalPrice:    order.TotalPrice,
 		Items:         orderItemsRes,
+		UserID:        order.UserID,
 		CreatedAt:     order.CreatedAt,
 		UpdatedAt:     order.UpdatedAt,
 	}

@@ -48,6 +48,5 @@ func (h *AuthHandler) Authenticate(w http.ResponseWriter, r *http.Request) {
 		responseWithError(w, r, err)
 		return
 	}
-
 	respondWithJSON(w, http.StatusOK, res)
 }
