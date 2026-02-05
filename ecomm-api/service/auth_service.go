@@ -4,32 +4,25 @@ import (
 	"context"
 	"ecomm/domain"
 	authDto "ecomm/ecomm-api/handler/dto/auth"
-	"ecomm/ecomm-api/storer"
 	"ecomm/mapper"
 	"ecomm/util"
+	"strconv"
 	"time"
-
-	"github.com/golang-jwt/jwt/v5"
 )
-
-type JWTClaims struct {
-	UserID string `json:"user_id"`
-	jwt.RegisteredClaims
-}
 
 type UserStorer interface {
 	ExistsByEmail(ctx context.Context, email string) bool
-	RegisterUser(ctx context.Context, user *domain.User) error
+	SaveUser(ctx context.Context, user *domain.User) error
 	FindByEmail(ctx context.Context, email string) (*domain.User, error)
 }
 
 type PasswordEncoder interface {
 	HashPassword(password string) (string, error)
-	CheckPassword(password, hash string) (bool, error)
+	CheckPassword(password, hash string) bool
 }
 
 type TokenGenerator interface {
-	GenerateToken(user *domain.User) (string, error)
+	GenerateToken(userID string, duration time.Duration) (string, error)
 }
 type AuthService struct {
 	userStorer      UserStorer
@@ -41,37 +34,19 @@ func NewAuthService(userStorer UserStorer, passwordEncoder PasswordEncoder, toke
 	return &AuthService{userStorer: userStorer, passwordEncoder: passwordEncoder, tokenGenerator: tokenGenerator}
 }
 
-func GenerateToken(userID string, duration time.Duration) (string, error) {
-	claims := &JWTClaims{
-		UserID: userID,
-		RegisteredClaims: jwt.RegisteredClaims{
-			ExpiresAt: jwt.NewNumericDate(time.Now().Add(duration)),
-			IssuedAt:  jwt.NewNumericDate(time.Now()),
-			NotBefore: jwt.NewNumericDate(time.Now()),
-		},
-	}
-
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	tokenString, err := token.SignedString(util.GetJWTSecret())
-	if err != nil {
-		return "", err
-	}
-	return tokenString, nil
-}
-
 func (s *AuthService) Register(ctx context.Context, request *authDto.RegisterRequest) (authDto.RegisterResponse, error) {
 
 	if s.ExistsByEmail(ctx, request.Email) {
-		return authDto.RegisterResponse{}, NewErrUserWithThatEmailAlreadyExists("register", "user", request.Email, nil)
+		return authDto.RegisterResponse{}, NewErrEmailAlreadyExists("register", "user", request.Email, nil)
 	}
 
 	user := mapper.MapToUserFromRegisterReq(request)
-	hashedPassword, err := util.HashPassword(user.Password)
+	hashedPassword, err := s.passwordEncoder.HashPassword(user.Password)
 	if err != nil {
 		return authDto.RegisterResponse{}, err
 	}
 	user.Password = hashedPassword
-	err = s.userStorer.Register(ctx, user)
+	err = s.userStorer.SaveUser(ctx, user)
 	if err != nil {
 		return authDto.RegisterResponse{}, err
 	}
@@ -80,7 +55,18 @@ func (s *AuthService) Register(ctx context.Context, request *authDto.RegisterReq
 }
 
 func (s *AuthService) Authenticate(ctx context.Context, request *authDto.LoginRequest) (authDto.LoginResponse, error) {
-
+	u, err := s.userStorer.FindByEmail(ctx, request.Email)
+	if err != nil {
+		return authDto.LoginResponse{}, err
+	}
+	if !s.passwordEncoder.CheckPassword(request.Password, u.Password) {
+		return authDto.LoginResponse{}, NewErrInvalidEmailOrPassword("login", "user", request.Email, nil)
+	}
+	tkn, err := s.tokenGenerator.GenerateToken(strconv.FormatInt(u.ID, 10), util.GetAccessTokenExpiration())
+	if err != nil {
+		return authDto.LoginResponse{}, err
+	}
+	return authDto.LoginResponse{AccessToken: tkn}, nil
 }
 
 func (s *AuthService) ExistsByEmail(context context.Context, email string) bool {

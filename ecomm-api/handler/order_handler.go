@@ -3,21 +3,19 @@ package handler
 import (
 	"context"
 	orderDto "ecomm/ecomm-api/handler/dto/order"
-	"ecomm/ecomm-api/service"
 	"encoding/json"
 	"net/http"
 )
 
 type OrderHandler struct {
-	orderService *service.OrderService
+	orderService OrderService
 }
 
 type OrderService interface {
 	CreateOrder(ctx context.Context, createOrderReq *orderDto.CreateOrderReq) (orderDto.OrderRes, error)
 }
 
-// TODO везде передаю конкретные реализации, а не интерфейсы. Нужно пофиксить
-func NewOrderHandler(orderService *service.OrderService) *OrderHandler {
+func NewOrderHandler(orderService OrderService) *OrderHandler {
 	return &OrderHandler{orderService: orderService}
 }
 

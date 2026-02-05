@@ -25,6 +25,8 @@ const (
 	queryToGetOrder = "SELECT * FROM orders WHERE id=:id"
 
 	queryToInsertUser = "INSERT INTO users (name, email, password, is_admin) VALUES (:name, :email, :password, :is_admin) RETURNING *"
+
+	queryToFindUserByEmail = "SELECT * FROM users WHERE email=:email"
 )
 
 func NewPostgresStorer(db *sqlx.DB) *PostgresStorer {
@@ -314,7 +316,7 @@ func (postgres *PostgresStorer) execTx(ctx context.Context, fn func(*sqlx.Tx) er
 	return nil
 }
 
-func (postgres *PostgresStorer) RegisterUser(ctx context.Context, user *domain.User) error {
+func (postgres *PostgresStorer) SaveUser(ctx context.Context, user *domain.User) error {
 	rows, err := postgres.db.NamedQueryContext(ctx, queryToInsertUser, user)
 	if err != nil {
 		return fmt.Errorf("error inserting user: %w", err)
@@ -329,4 +331,41 @@ func (postgres *PostgresStorer) RegisterUser(ctx context.Context, user *domain.U
 		return fmt.Errorf("user not created")
 	}
 	return nil
+}
+
+func (postgres *PostgresStorer) ExistsByEmail(ctx context.Context, email string) bool {
+	args := map[string]any{
+		"email": email,
+	}
+	rows, err := postgres.db.NamedQueryContext(ctx, queryToFindUserByEmail, args)
+
+	if err != nil {
+		return false
+	}
+	defer rows.Close()
+	if rows.Next() {
+		return true
+	}
+	return false
+}
+
+func (postgres *PostgresStorer) FindByEmail(ctx context.Context, email string) (*domain.User, error) {
+	op := "storer.FindByEmail"
+	user := &domain.User{}
+	args := map[string]any{
+		"email": email,
+	}
+	rows, err := postgres.db.NamedQueryContext(ctx, queryToFindUserByEmail, args)
+
+	if err != nil {
+		return nil, fmt.Errorf("error finding user: %w", err)
+	}
+	defer rows.Close()
+	if rows.Next() {
+		if err := rows.StructScan(user); err != nil {
+			return nil, fmt.Errorf("error scanning rows: %w", err)
+		}
+		return user, nil
+	}
+	return nil, NewNotFoundError(op, "user", email, err)
 }

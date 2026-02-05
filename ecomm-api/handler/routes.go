@@ -36,7 +36,7 @@ func (rm *RouterManager) RegisterRoutes() *chi.Mux {
 	})
 
 	r.Route("/users", func(r chi.Router) {
-		r.Post("/login", rm.AuthHandler.LoginUser)
+		r.Post("/login", rm.AuthHandler.Authenticate)
 		r.Post("/register", rm.AuthHandler.Register)
 	})
 

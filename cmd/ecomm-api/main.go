@@ -22,7 +22,8 @@ func main() {
 
 	productService := service.NewProductService(postgresStorer)
 	orderService := service.NewOrderService(postgresStorer)
-	authService := service.NewAuthService(postgresStorer, passwordEncoder, nil)
+	tokenGenerator := util.NewJwtTokenGenerator()
+	authService := service.NewAuthService(postgresStorer, passwordEncoder, tokenGenerator)
 	productHandler := handler.NewProductHandler(productService)
 	orderHandler := handler.NewOrderHandler(orderService)
 	authHandler := handler.NewAuthHandler(authService)
