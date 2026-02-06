@@ -11,6 +11,7 @@ type JwtTokenGenerator struct {
 
 type JWTClaims struct {
 	UserID string `json:"user_id"`
+	Role   string `json:"role"`
 	jwt.RegisteredClaims
 }
 
@@ -18,9 +19,10 @@ func NewJwtTokenGenerator() *JwtTokenGenerator {
 	return &JwtTokenGenerator{}
 }
 
-func (t *JwtTokenGenerator) GenerateToken(userID string, duration time.Duration) (string, error) {
+func (t *JwtTokenGenerator) GenerateToken(userID string, role string, duration time.Duration) (string, error) {
 	claims := JWTClaims{
 		UserID: userID,
+		Role:   role,
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(duration)),
 			IssuedAt:  jwt.NewNumericDate(time.Now()),

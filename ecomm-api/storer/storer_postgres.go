@@ -24,7 +24,7 @@ const (
 
 	queryToGetOrder = "SELECT * FROM orders WHERE id=:id"
 
-	queryToInsertUser = "INSERT INTO users (name, email, password, is_admin) VALUES (:name, :email, :password, :is_admin) RETURNING *"
+	queryToInsertUser = "INSERT INTO users (name, email, password, role) VALUES (:name, :email, :password, :role) RETURNING *"
 
 	queryToFindUserByEmail = "SELECT * FROM users WHERE email=:email"
 )

@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"ecomm/domain" // Added domain import
 	"ecomm/util"
 	"net/http"
 
@@ -32,14 +33,23 @@ func (rm *RouterManager) RegisterRoutes() *chi.Mux {
 	r.Group(func(r chi.Router) {
 		r.Use(AuthMiddleware(tokenValidator))
 		r.Route("/products", func(r chi.Router) {
-			r.Post("/", rm.ProductHandler.createProduct)
+			// Routes requiring admin role
+			r.Group(func(r chi.Router) {
+				r.Use(AuthorizeMiddleware(domain.RoleAdmin))
+				r.Post("/", rm.ProductHandler.createProduct)
+				r.Put("/{id}", rm.ProductHandler.updateProduct)
+				r.Delete("/{id}", rm.ProductHandler.deleteProduct)
+			})
+			// Routes accessible by any authenticated user (or no specific role check needed beyond authentication)
 			r.Get("/{id}", rm.ProductHandler.getProduct)
 			r.Get("/", rm.ProductHandler.getProducts)
-			r.Put("/{id}", rm.ProductHandler.updateProduct)
-			r.Delete("/{id}", rm.ProductHandler.deleteProduct)
 		})
 		r.Route("/orders", func(r chi.Router) {
-			r.Post("/", rm.OrderHandler.createOrder)
+			// Routes requiring user role
+			r.Group(func(r chi.Router) {
+				r.Use(AuthorizeMiddleware(domain.RoleUser))
+				r.Post("/", rm.OrderHandler.createOrder)
+			})
 		})
 	})
 

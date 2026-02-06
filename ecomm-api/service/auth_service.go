@@ -22,7 +22,7 @@ type PasswordEncoder interface {
 }
 
 type TokenGenerator interface {
-	GenerateToken(userID string, duration time.Duration) (string, error)
+	GenerateToken(userID string, role string, duration time.Duration) (string, error)
 }
 
 type TokenValidator interface {
@@ -50,6 +50,7 @@ func (s *AuthService) Register(ctx context.Context, request *authDto.RegisterReq
 		return authDto.RegisterResponse{}, err
 	}
 	user.Password = hashedPassword
+	user.Role = domain.RoleUser
 	err = s.userStorer.SaveUser(ctx, user)
 	if err != nil {
 		return authDto.RegisterResponse{}, err
@@ -66,7 +67,7 @@ func (s *AuthService) Authenticate(ctx context.Context, request *authDto.LoginRe
 	if !s.passwordEncoder.CheckPassword(request.Password, u.Password) {
 		return authDto.LoginResponse{}, NewErrInvalidEmailOrPassword("login", "user", request.Email, nil)
 	}
-	tkn, err := s.tokenGenerator.GenerateToken(strconv.FormatInt(u.ID, 10), util.GetAccessTokenExpiration())
+	tkn, err := s.tokenGenerator.GenerateToken(strconv.FormatInt(u.ID, 10), u.Role, util.GetAccessTokenExpiration())
 	if err != nil {
 		return authDto.LoginResponse{}, err
 	}

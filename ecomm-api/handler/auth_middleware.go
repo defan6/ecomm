@@ -34,14 +34,48 @@ func AuthMiddleware(validator service.TokenValidator) func(http.Handler) http.Ha
 				http.Error(w, "Failed to convert ID: string to int", http.StatusUnauthorized)
 				return
 			}
+			role := claims.Role
 
 			ctx := context.WithValue(r.Context(), "userID", userID)
+			ctx = context.WithValue(ctx, "role", role)
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}
 }
 
+func AuthorizeMiddleware(requiredRoles ...string) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			userRole, ok := GetUserRoleFromContext(r.Context())
+			if !ok {
+				http.Error(w, "User role not found in context", http.StatusForbidden)
+				return
+			}
+
+			if !containsString(requiredRoles, userRole) {
+				http.Error(w, "Forbidden: Insufficient role", http.StatusForbidden)
+				return
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
+func containsString(slice []string, s string) bool {
+	for _, item := range slice {
+		if item == s {
+			return true
+		}
+	}
+	return false
+}
+
 func GetUserIDFromContext(ctx context.Context) (int64, bool) {
 	userID, ok := ctx.Value("userID").(int64)
 	return userID, ok
+}
+
+func GetUserRoleFromContext(ctx context.Context) (string, bool) {
+	role, ok := ctx.Value("role").(string)
+	return role, ok
 }

@@ -509,6 +509,7 @@ func TestCreateOrder(t *testing.T) {
 		TaxPrice:      10,
 		ShippingPrice: 20,
 		TotalPrice:    130,
+		UserID:        1,
 		Items: []domain.OrderItem{
 			{Name: "item1", Quantity: 1, Image: "test.jpg", Price: 50, ProductID: 1},
 			{Name: "item2", Quantity: 2, Image: "test.jpg", Price: 25, ProductID: 2},
@@ -524,12 +525,12 @@ func TestCreateOrder(t *testing.T) {
 			test: func(t *testing.T, postgresTest *PostgresStorer, mock sqlmock.Sqlmock) {
 				mock.ExpectBegin()
 
-				prepareOrder := mock.ExpectPrepare(regexp.QuoteMeta("INSERT INTO orders (payment_method, tax_price, shipping_price, total_price) VALUES ($1, $2, $3, $4) RETURNING *"))
-				orderColumns := []string{"id", "payment_method", "tax_price", "shipping_price", "total_price", "created_at", "updated_at"}
+				prepareOrder := mock.ExpectPrepare(regexp.QuoteMeta("INSERT INTO orders (payment_method, tax_price, shipping_price, total_price, user_id) VALUES ($1, $2, $3, $4, $5) RETURNING *"))
+				orderColumns := []string{"id", "payment_method", "tax_price", "shipping_price", "total_price", "user_id", "created_at", "updated_at"}
 				orderRows := sqlmock.NewRows(orderColumns).
-					AddRow(1, order.PaymentMethod, order.TaxPrice, order.ShippingPrice, order.TotalPrice, time.Now(), nil)
+					AddRow(1, order.PaymentMethod, order.TaxPrice, order.ShippingPrice, order.TotalPrice, order.UserID, time.Now(), nil)
 				prepareOrder.ExpectQuery().
-					WithArgs(order.PaymentMethod, order.TaxPrice, order.ShippingPrice, order.TotalPrice).
+					WithArgs(order.PaymentMethod, order.TaxPrice, order.ShippingPrice, order.TotalPrice, order.UserID).
 					WillReturnRows(orderRows)
 				itemColumns := []string{"id", "name", "quantity", "image", "price", "product_id", "order_id"}
 				prepItem1 := mock.ExpectPrepare(regexp.QuoteMeta("INSERT INTO order_items (name, quantity, image, price, product_id, order_id) VALUES ($1, $2, $3, $4, $5, $6) RETURNING * "))
@@ -554,6 +555,40 @@ func TestCreateOrder(t *testing.T) {
 				err = mock.ExpectationsWereMet()
 				require.NoError(t, err)
 
+			},
+		},
+		{
+			name: "failed to insert order",
+			test: func(t *testing.T, postgresTest *PostgresStorer, mock sqlmock.Sqlmock) {
+				mock.ExpectBegin()
+
+				prepareOrder := mock.ExpectPrepare(regexp.QuoteMeta("INSERT INTO orders (payment_method, tax_price, shipping_price, total_price, user_id) VALUES ($1, $2, $3, $4, $5) RETURNING *"))
+				orderColumns := []string{"id", "payment_method", "tax_price", "shipping_price", "total_price", "user_id", "created_at", "updated_at"}
+				orderRows := sqlmock.NewRows(orderColumns).
+					AddRow(1, order.PaymentMethod, order.TaxPrice, order.ShippingPrice, order.TotalPrice, order.UserID, time.Now(), nil)
+				prepareOrder.ExpectQuery().
+					WithArgs(order.PaymentMethod, order.TaxPrice, order.ShippingPrice, order.TotalPrice, order.UserID).
+					WillReturnRows(orderRows)
+				itemColumns := []string{"id", "name", "quantity", "image", "price", "product_id", "order_id"}
+				prepItem1 := mock.ExpectPrepare(regexp.QuoteMeta("INSERT INTO order_items (name, quantity, image, price, product_id, order_id) VALUES ($1, $2, $3, $4, $5, $6) RETURNING * "))
+				item1 := order.Items[0]
+				item1Rows := sqlmock.NewRows(itemColumns).
+					AddRow(101, item1.Name, item1.Quantity, item1.Image, item1.Price, item1.ProductID, 1)
+				prepItem1.ExpectQuery().
+					WithArgs(item1.Name, item1.Quantity, item1.Image, item1.Price, item1.ProductID, 1).
+					WillReturnRows(item1Rows)
+
+				prepItem2 := mock.ExpectPrepare(regexp.QuoteMeta("INSERT INTO order_items (name, quantity, image, price, product_id, order_id) VALUES ($1, $2, $3, $4, $5, $6) RETURNING * "))
+				item2 := order.Items[1]
+				prepItem2.ExpectQuery().
+					WithArgs(item2.Name, item2.Quantity, item2.Image, item2.Price, item2.ProductID, 1).
+					WillReturnError(fmt.Errorf("error"))
+				mock.ExpectRollback()
+
+				_, err := postgresTest.CreateOrder(context.Background(), order)
+				require.Error(t, err)
+				err = mock.ExpectationsWereMet()
+				require.NoError(t, err)
 			},
 		},
 	}
