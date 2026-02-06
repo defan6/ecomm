@@ -49,6 +49,7 @@ func (rm *RouterManager) RegisterRoutes() *chi.Mux {
 			r.Group(func(r chi.Router) {
 				r.Use(AuthorizeMiddleware(domain.RoleUser))
 				r.Post("/", rm.OrderHandler.createOrder)
+				r.Put("/{id}", rm.OrderHandler.updateOrder)
 			})
 		})
 	})

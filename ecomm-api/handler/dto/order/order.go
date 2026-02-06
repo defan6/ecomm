@@ -8,6 +8,19 @@ type CreateOrderReq struct {
 	Items         []CreateOrderItemReq
 }
 
+type UpdateOrderItemReq struct {
+	ID        int64  `json:"id"`
+	Quantity  *int64 `json:"quantity"`
+	ProductID *int64 `json:"product_id"`
+}
+
+type UpdateOrderReq struct {
+	PaymentMethod *string              `json:"payment_method"`
+	UserID        int64                `json:"user_id"`
+	Status        *string              `json:"status"`
+	Items         []UpdateOrderItemReq `json:"items"`
+}
+
 type CreateOrderItemReq struct {
 	Quantity  int64 `json:"quantity"`
 	ProductID int64 `json:"product_id"`
@@ -30,6 +43,7 @@ type OrderRes struct {
 	ShippingPrice float64        `json:"shipping_price"`
 	TotalPrice    float64        `json:"total_price"`
 	UserID        int64          `json:"user_id"`
+	Status        string         `json:"status"`
 	Items         []OrderItemRes `json:"items"`
 	CreatedAt     time.Time      `json:"created_at"`
 	UpdatedAt     *time.Time     `json:"updated_at"`

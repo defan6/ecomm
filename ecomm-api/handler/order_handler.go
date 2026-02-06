@@ -13,6 +13,7 @@ type OrderHandler struct {
 
 type OrderService interface {
 	CreateOrder(ctx context.Context, createOrderReq *orderDto.CreateOrderReq) (orderDto.OrderRes, error)
+	UpdateOrder(ctx context.Context, id int64, updateOrderRequest *orderDto.UpdateOrderReq) (orderDto.OrderRes, error)
 }
 
 func NewOrderHandler(orderService OrderService) *OrderHandler {
@@ -33,4 +34,25 @@ func (h *OrderHandler) createOrder(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	respondWithJSON(w, http.StatusCreated, orderRes)
+}
+
+func (h *OrderHandler) updateOrder(w http.ResponseWriter, r *http.Request) {
+	id, err := extractAndParseId(r)
+	if err != nil {
+		responseWithError(w, r, err)
+		return
+	}
+	var updateOrderReq orderDto.UpdateOrderReq
+	if err := json.NewDecoder(r.Body).Decode(&updateOrderReq); err != nil {
+		responseWithError(w, r, err)
+		return
+	}
+	userID, _ := GetUserIDFromContext(r.Context())
+	updateOrderReq.UserID = userID
+	orderRes, err := h.orderService.UpdateOrder(r.Context(), id, &updateOrderReq)
+	if err != nil {
+		responseWithError(w, r, err)
+		return
+	}
+	respondWithJSON(w, http.StatusOK, orderRes)
 }

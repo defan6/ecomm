@@ -19,7 +19,9 @@ const (
 
 	queryToUpdateProduct = "UPDATE products SET name=:name, image=:image, category=:category, description=:description, rating=:rating, num_reviews=:num_reviews, price=:price, count_in_stock=:count_in_stock, updated_at=NOW() WHERE id=:id RETURNING *"
 
-	queryToInsertOrder     = "INSERT INTO orders (payment_method, tax_price, shipping_price, total_price, user_id) VALUES (:payment_method, :tax_price, :shipping_price, :total_price, :user_id) RETURNING *"
+	queryToInsertOrder     = "INSERT INTO orders (payment_method, tax_price, shipping_price, total_price, user_id, status) VALUES (:payment_method, :tax_price, :shipping_price, :total_price, :user_id, :status) RETURNING *"
+	queryToUpdateOrder     = "UPDATE orders SET payment_method=:payment_method, tax_price=:tax_price, shipping_price=:shipping_price, total_price=:total_price, user_id=:user_id, status=:status, updated_at=NOW() WHERE id=:id RETURNING *"
+	queryToUpdateOrderItem = "UPDATE order_items SET name=:name, quantity=:quantity, image=:image, price=:price, product_id=:product_id, order_id=:order_id  WHERE order_id=:order_id RETURNING *"
 	queryToInsertOrderItem = "INSERT INTO order_items (name, quantity, image, price, product_id, order_id) VALUES (:name, :quantity, :image, :price, :product_id, :order_id) RETURNING *"
 
 	queryToGetOrder = "SELECT * FROM orders WHERE id=:id"
@@ -224,7 +226,10 @@ func createOrderItem(ctx context.Context, tx *sqlx.Tx, orderItem *domain.OrderIt
 
 func (postgres *PostgresStorer) GetOrder(ctx context.Context, id int64) (*domain.Order, error) {
 	order := &domain.Order{}
-	rows, err := postgres.db.NamedQueryContext(ctx, queryToGetOrder, id)
+	arg := map[string]interface{}{
+		"id": id,
+	}
+	rows, err := postgres.db.NamedQueryContext(ctx, queryToGetOrder, arg)
 	if err != nil {
 		return nil, fmt.Errorf("Error getting order: %w", err)
 	}
@@ -269,6 +274,81 @@ func (postgres *PostgresStorer) GetOrders(ctx context.Context) ([]*domain.Order,
 	}
 
 	return orders, nil
+}
+
+func (postgres *PostgresStorer) UpdateOrder(ctx context.Context, updatedOrder *domain.Order) (*domain.Order, error) {
+	err := postgres.execTx(ctx, func(tx *sqlx.Tx) error {
+		var txErr error
+		_, txErr = postgres.updateOrder(ctx, tx, updatedOrder)
+		if txErr != nil {
+			return fmt.Errorf("error updating order row: %w", txErr)
+		}
+
+		for i := range updatedOrder.Items {
+			updatedOrder.Items[i].OrderID = updatedOrder.ID
+
+			txErr = updateOrderItem(ctx, tx, &updatedOrder.Items[i])
+			if txErr != nil {
+				return fmt.Errorf("error updating order item row: %w", txErr)
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err // Возвращаем ошибку, если транзакция не удалась
+	}
+	return updatedOrder, nil
+}
+
+func (postgres *PostgresStorer) updateOrder(ctx context.Context, tx *sqlx.Tx, updatedOrder *domain.Order) (*domain.Order, error) {
+	stmt, err := tx.PrepareNamedContext(ctx, queryToUpdateOrder)
+	if err != nil {
+		return nil, fmt.Errorf("Error creating statement: %w", err)
+	}
+	defer stmt.Close()
+
+	rows, err := stmt.QueryxContext(ctx, updatedOrder)
+
+	if err != nil {
+		return nil, fmt.Errorf("Error updating order: %w", err)
+	}
+
+	defer rows.Close()
+
+	if !rows.Next() {
+		return nil, fmt.Errorf("No rows selected: %w", err)
+	}
+	if err := rows.StructScan(updatedOrder); err != nil {
+		return nil, fmt.Errorf("Error scanning rows: %w", err)
+	}
+
+	return updatedOrder, nil
+}
+
+func updateOrderItem(ctx context.Context, tx *sqlx.Tx, orderItem *domain.OrderItem) error {
+	stmt, err := tx.PrepareNamedContext(ctx, queryToUpdateOrderItem)
+
+	if err != nil {
+		return fmt.Errorf("Error creating statement: %w", err)
+	}
+
+	defer stmt.Close()
+	rows, err := stmt.QueryxContext(ctx, orderItem)
+
+	if err != nil {
+		return fmt.Errorf("Error updating orderItem: %w", err)
+	}
+
+	defer rows.Close()
+
+	if !rows.Next() {
+		return fmt.Errorf("No rows selected: %w", err)
+	}
+	if err := rows.StructScan(orderItem); err != nil {
+		return fmt.Errorf("Error scanning rows: %w", err)
+	}
+
+	return nil
 }
 
 func (postgres *PostgresStorer) DeleteOrder(ctx context.Context, id int64) error {
