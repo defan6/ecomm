@@ -109,6 +109,7 @@ func MapToOrderRes(order *domain.Order) orderDto.OrderRes {
 		TotalPrice:    order.TotalPrice,
 		Items:         orderItemsRes,
 		UserID:        order.UserID,
+		Status:        order.Status,
 		CreatedAt:     order.CreatedAt,
 		UpdatedAt:     order.UpdatedAt,
 	}

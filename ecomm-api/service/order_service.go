@@ -9,6 +9,15 @@ import (
 	"fmt"
 )
 
+// orderStatusValues маппинг строковых статусов заказов на числовые значения
+var orderStatusValues = map[string]int{
+	domain.OrderStatusPending:    1,
+	domain.OrderStatusProcessing: 2,
+	domain.OrderStatusShipped:    3,
+	domain.OrderStatusDelivered:  4,
+	domain.OrderStatusCancelled:  5,
+}
+
 type OrderService struct {
 	orderStorer OrderStorer
 }
@@ -21,6 +30,7 @@ type OrderStorer interface {
 	CreateOrder(ctx context.Context, order *domain.Order) (*domain.Order, error)
 	GetOrder(ctx context.Context, id int64) (*domain.Order, error)
 	UpdateOrder(ctx context.Context, updatedOrder *domain.Order) (*domain.Order, error)
+	CancelOrder(ctx context.Context, id int64) (*domain.Order, error)
 	GetProductsByIDs(ctx context.Context, ids []int64) ([]*domain.Product, error)
 }
 
@@ -56,14 +66,22 @@ func (s *OrderService) CreateOrder(ctx context.Context, createOrderReq *orderDto
 
 func (s *OrderService) UpdateOrder(ctx context.Context, id int64, updateOrderRequest *orderDto.UpdateOrderReq) (orderDto.OrderRes, error) {
 	op := "updateOrder"
-
 	if err := validateUpdateOrderReq(id, updateOrderRequest); err != nil {
-		return orderDto.OrderRes{}, err
+		return orderDto.OrderRes{}, fmt.Errorf("failed to get order: %w", err)
 	}
 	existingOrder, err := s.orderStorer.GetOrder(ctx, id)
-
 	if err != nil {
-		return orderDto.OrderRes{}, errors.New("failed to get order")
+		if errors.As(err, &notFoundErr) {
+			return orderDto.OrderRes{}, NewErrNotFound(notFoundErr.Op, notFoundErr.Resource, id, err)
+		}
+		return orderDto.OrderRes{}, err
+	}
+	currentStatusValue, ok := orderStatusValues[existingOrder.Status]
+	if !ok {
+		return orderDto.OrderRes{}, errors.New("order status is empty")
+	}
+	if currentStatusValue > orderStatusValues[domain.OrderStatusProcessing] {
+		return orderDto.OrderRes{}, errors.New("you cannot update order. Status: " + existingOrder.Status)
 	}
 
 	orderToUpdate := *existingOrder
@@ -92,6 +110,39 @@ func (s *OrderService) UpdateOrder(ctx context.Context, id int64, updateOrderReq
 	}
 	orderRes := mapper.MapToOrderRes(order)
 	return orderRes, nil
+
+}
+
+func (s *OrderService) GetOrder(ctx context.Context, id int64) (*orderDto.OrderRes, error) {
+	res, err := s.orderStorer.GetOrder(ctx, id)
+	if err != nil {
+		if errors.As(err, &notFoundErr) {
+			return nil, NewErrNotFound(notFoundErr.Op, notFoundErr.Resource, id, err)
+		}
+		return nil, fmt.Errorf("failed to get order: %w", err)
+	}
+	orderRes := mapper.MapToOrderRes(res)
+	return &orderRes, nil
+}
+
+func (s *OrderService) CancelOrder(ctx context.Context, id int64, currentUserId int64) (*orderDto.OrderRes, error) {
+	existingOrder, err := s.orderStorer.GetOrder(ctx, id)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get order: %w", err)
+	}
+	if existingOrder.UserID != currentUserId {
+		return nil, fmt.Errorf("failed to get order: %w", err)
+	}
+	if orderStatusValues[existingOrder.Status] > orderStatusValues[domain.OrderStatusProcessing] {
+		return nil, errors.New("you cannot cancel order. Status: " + existingOrder.Status)
+	}
+
+	res, err := s.orderStorer.CancelOrder(ctx, id)
+	if err != nil {
+		return nil, fmt.Errorf("failed to cancel order: %w", err)
+	}
+	orderRes := mapper.MapToOrderRes(res)
+	return &orderRes, nil
 
 }
 

@@ -8,10 +8,6 @@ import (
 	"errors"
 )
 
-var (
-	productNotFoundErr *ErrNotFound
-)
-
 type ProductService struct {
 	productStorer ProductStorer
 }
@@ -44,14 +40,8 @@ func (s *ProductService) CreateProduct(ctx context.Context, createProductReq *pr
 func (s *ProductService) GetProduct(ctx context.Context, id int64) (productDto.ProductRes, error) {
 	p, err := s.productStorer.GetProduct(ctx, id)
 	if err != nil {
-		if errors.As(err, &productNotFoundErr) {
-			return productDto.ProductRes{}, &ErrNotFound{
-				Op:        productNotFoundErr.Op,
-				ID:        productNotFoundErr.ID,
-				Resource:  productNotFoundErr.Resource,
-				Timestamp: productNotFoundErr.Timestamp,
-				Err:       err,
-			}
+		if errors.As(err, &notFoundErr) {
+			return productDto.ProductRes{}, NewErrNotFound(notFoundErr.Op, notFoundErr.Resource, id, err)
 		}
 		return productDto.ProductRes{}, err
 	}
@@ -73,12 +63,12 @@ func (s *ProductService) UpdateProduct(ctx context.Context, id int64, updateProd
 	p.ID = id
 	err := s.productStorer.UpdateProduct(ctx, p)
 	if err != nil {
-		if errors.As(err, &productNotFoundErr) {
+		if errors.As(err, &notFoundErr) {
 			return productDto.ProductRes{}, &ErrNotFound{
-				Op:        productNotFoundErr.Op,
-				ID:        productNotFoundErr.ID,
-				Resource:  productNotFoundErr.Resource,
-				Timestamp: productNotFoundErr.Timestamp,
+				Op:        notFoundErr.Op,
+				ID:        notFoundErr.ID,
+				Resource:  notFoundErr.Resource,
+				Timestamp: notFoundErr.Timestamp,
 				Err:       err,
 			}
 		}
@@ -91,12 +81,12 @@ func (s *ProductService) UpdateProduct(ctx context.Context, id int64, updateProd
 func (s *ProductService) DeleteProduct(ctx context.Context, id int64) error {
 	err := s.productStorer.DeleteProduct(ctx, id)
 	if err != nil {
-		if errors.As(err, &productNotFoundErr) {
+		if errors.As(err, &notFoundErr) {
 			return &ErrNotFound{
-				Op:        productNotFoundErr.Op,
-				ID:        productNotFoundErr.ID,
-				Resource:  productNotFoundErr.Resource,
-				Timestamp: productNotFoundErr.Timestamp,
+				Op:        notFoundErr.Op,
+				ID:        notFoundErr.ID,
+				Resource:  notFoundErr.Resource,
+				Timestamp: notFoundErr.Timestamp,
 				Err:       err,
 			}
 		}

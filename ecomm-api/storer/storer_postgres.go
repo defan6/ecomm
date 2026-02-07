@@ -26,6 +26,8 @@ const (
 
 	queryToGetOrder = "SELECT * FROM orders WHERE id=:id"
 
+	queryToCancelOrder = "UPDATE orders SET status=:status WHERE id=:id"
+
 	queryToInsertUser = "INSERT INTO users (name, email, password, role) VALUES (:name, :email, :password, :role) RETURNING *"
 
 	queryToFindUserByEmail = "SELECT * FROM users WHERE email=:email"
@@ -147,16 +149,13 @@ func (postgres *PostgresStorer) DeleteProduct(ctx context.Context, id int64) err
 
 func (postgres *PostgresStorer) CreateOrder(ctx context.Context, order *domain.Order) (*domain.Order, error) {
 	err := postgres.execTx(ctx, func(tx *sqlx.Tx) error {
-		// `createOrder` вернет тот же указатель, но с обновленным ID
 		var txErr error
 		_, txErr = createOrder(ctx, tx, order)
 		if txErr != nil {
 			return fmt.Errorf("error creating order row: %w", txErr)
 		}
 
-		// Теперь order.ID корректно установлен, и мы можем использовать его
 		for i := range order.Items {
-			// Присваиваем ID заказа каждому элементу
 			order.Items[i].OrderID = order.ID
 
 			txErr = createOrderItem(ctx, tx, &order.Items[i])
@@ -169,7 +168,6 @@ func (postgres *PostgresStorer) CreateOrder(ctx context.Context, order *domain.O
 	if err != nil {
 		return nil, err // Возвращаем ошибку, если транзакция не удалась
 	}
-	// Возвращаем измененный оригинальный объект
 	return order, nil
 }
 
@@ -222,37 +220,6 @@ func createOrderItem(ctx context.Context, tx *sqlx.Tx, orderItem *domain.OrderIt
 	}
 
 	return nil
-}
-
-func (postgres *PostgresStorer) GetOrder(ctx context.Context, id int64) (*domain.Order, error) {
-	order := &domain.Order{}
-	arg := map[string]interface{}{
-		"id": id,
-	}
-	rows, err := postgres.db.NamedQueryContext(ctx, queryToGetOrder, arg)
-	if err != nil {
-		return nil, fmt.Errorf("Error getting order: %w", err)
-	}
-	defer rows.Close()
-
-	if rows.Next() {
-		if err := rows.StructScan(order); err != nil {
-			return nil, fmt.Errorf("Error scanning rows: %w", err)
-		}
-	} else {
-		return nil, fmt.Errorf("Order with id %d not found", id)
-	}
-
-	var items []domain.OrderItem
-	err = postgres.db.SelectContext(ctx, &items, "SELECT * FROM order_items WHERE order_id=$1", id)
-	if err != nil {
-		return nil, fmt.Errorf("error getting orderItems: %w", err)
-	}
-
-	order.Items = items
-
-	return order, nil
-
 }
 
 func (postgres *PostgresStorer) GetOrders(ctx context.Context) ([]*domain.Order, error) {
@@ -318,7 +285,7 @@ func (postgres *PostgresStorer) updateOrder(ctx context.Context, tx *sqlx.Tx, up
 	if !rows.Next() {
 		return nil, fmt.Errorf("No rows selected: %w", err)
 	}
-	if err := rows.StructScan(updatedOrder); err != nil {
+	if err = rows.StructScan(updatedOrder); err != nil {
 		return nil, fmt.Errorf("Error scanning rows: %w", err)
 	}
 
@@ -344,33 +311,74 @@ func updateOrderItem(ctx context.Context, tx *sqlx.Tx, orderItem *domain.OrderIt
 	if !rows.Next() {
 		return fmt.Errorf("No rows selected: %w", err)
 	}
-	if err := rows.StructScan(orderItem); err != nil {
+	if err = rows.StructScan(orderItem); err != nil {
 		return fmt.Errorf("Error scanning rows: %w", err)
 	}
 
 	return nil
 }
 
-func (postgres *PostgresStorer) DeleteOrder(ctx context.Context, id int64) error {
-	err := postgres.execTx(ctx, func(tx *sqlx.Tx) error {
-		_, err := tx.ExecContext(ctx, "DELETE FROM order_items WHERE order_id = $1", id)
-		if err != nil {
-			return fmt.Errorf("error deleting order items: %w", err)
-		}
-
-		_, err = tx.ExecContext(ctx, "DELETE FROM orders WHERE id = $1", id)
-
-		if err != nil {
-			return fmt.Errorf("error deleting order: %w", err)
-		}
-
-		return nil
-	})
-
-	if err != nil {
-		return fmt.Errorf("error deleting order: %w", err)
+func (postgres *PostgresStorer) GetOrder(ctx context.Context, id int64) (*domain.Order, error) {
+	op := "GetOrder"
+	order := &domain.Order{}
+	arg := map[string]interface{}{
+		"id": id,
 	}
-	return nil
+	rows, err := postgres.db.NamedQueryContext(ctx, queryToGetOrder, arg)
+	if err != nil {
+		return nil, fmt.Errorf("Error getting order: %w", err)
+	}
+	defer rows.Close()
+
+	if rows.Next() {
+		if err = rows.StructScan(order); err != nil {
+			return nil, fmt.Errorf("Error scanning rows: %w", err)
+		}
+	} else {
+		return nil, NewNotFoundError(op, "order", id, nil)
+	}
+
+	var items []domain.OrderItem
+	err = postgres.db.SelectContext(ctx, &items, "SELECT * FROM order_items WHERE order_id=$1", id)
+	if err != nil {
+		return nil, fmt.Errorf("error getting orderItems: %w", err)
+	}
+
+	order.Items = items
+
+	return order, nil
+
+}
+func (postgres *PostgresStorer) CancelOrder(ctx context.Context, id int64) (*domain.Order, error) {
+	op := "CancelOrder"
+	order := &domain.Order{}
+	args := map[string]interface{}{
+		"id":     id,
+		"status": domain.OrderStatusCancelled,
+	}
+	rows, err := postgres.db.NamedQueryContext(ctx, queryToCancelOrder, args)
+	if err != nil {
+		return nil, fmt.Errorf("Error cancelling order: %w", err)
+	}
+	defer rows.Close()
+	if rows.Next() {
+		if err = rows.StructScan(&order); err != nil {
+			return nil, fmt.Errorf("Error scanning rows: %w", err)
+		}
+
+	} else {
+		return nil, NewNotFoundError(op, "order", id, nil)
+	}
+
+	var items []domain.OrderItem
+	err = postgres.db.SelectContext(ctx, &items, "SELECT * FROM order_items WHERE order_id=$1", id)
+	if err != nil {
+		return nil, fmt.Errorf("error getting orderItems: %w", err)
+	}
+
+	order.Items = items
+
+	return order, nil
 }
 
 func (postgres *PostgresStorer) execTx(ctx context.Context, fn func(*sqlx.Tx) error) error {
@@ -389,7 +397,7 @@ func (postgres *PostgresStorer) execTx(ctx context.Context, fn func(*sqlx.Tx) er
 		return fmt.Errorf("error in transaction: %w", err)
 	}
 
-	if err := tx.Commit(); err != nil {
+	if err = tx.Commit(); err != nil {
 		return fmt.Errorf("error committing transaction: %w", err)
 	}
 
@@ -403,7 +411,7 @@ func (postgres *PostgresStorer) SaveUser(ctx context.Context, user *domain.User)
 	}
 	defer rows.Close()
 	if rows.Next() {
-		if err := rows.StructScan(user); err != nil {
+		if err = rows.StructScan(user); err != nil {
 			return fmt.Errorf("error scanning rows: %w", err)
 		}
 
@@ -442,7 +450,7 @@ func (postgres *PostgresStorer) FindByEmail(ctx context.Context, email string) (
 	}
 	defer rows.Close()
 	if rows.Next() {
-		if err := rows.StructScan(user); err != nil {
+		if err = rows.StructScan(user); err != nil {
 			return nil, fmt.Errorf("error scanning rows: %w", err)
 		}
 		return user, nil
